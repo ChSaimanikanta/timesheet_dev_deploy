@@ -50,6 +50,11 @@ public class SupervisorLeaveRequestService {
         return leaveRequestRepository.findAll();
     }
 
+    public List<LeaveRequest> getLeaveRequestsBySupervisorId(String supervisorId) {
+        return leaveRequestRepository.findBySupervisorId(supervisorId);
+    }
+
+    
     public LeaveRequest approveLeaveRequest(Long id, String adminId) {
         LeaveRequest leaveRequest = leaveRequestRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Leave request not found."));

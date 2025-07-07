@@ -55,11 +55,17 @@ public class SupervisorLeaveRequestController {
 	        return leaveRequestService.getAllLeaveRequests();
 	    }
 
-	    @GetMapping("/leave-requests/{id}")
-	    public LeaveRequest getLeaveRequestById(@PathVariable Long id) {
-	        return leaveRequestRepository.findById(id)
-	            .orElseThrow(() -> new IllegalArgumentException("LeaveRequest not found for this id :: " + id));
+	    @GetMapping("/leave-requests/{supervisorId}")
+	    public List<LeaveRequest> getLeaveRequestsBySupervisorId(@PathVariable String supervisorId) {
+	        return leaveRequestService.getLeaveRequestsBySupervisorId(supervisorId);
 	    }
+
+	    
+//	    @GetMapping("/leave-requests/{id}")
+//	    public LeaveRequest getLeaveRequestById(@PathVariable Long id) {
+//	        return leaveRequestRepository.findById(id)
+//	            .orElseThrow(() -> new IllegalArgumentException("LeaveRequest not found for this id :: " + id));
+//	    }
 
 	    @PutMapping("/leave-requests/{id}/approve")
 	    public LeaveRequest approveLeaveRequest(@PathVariable Long id, @RequestParam String adminId) {

@@ -108,34 +108,38 @@ function SupervisorHome() {
  
 
 
-  useEffect(() => {
-    async function fetchLeaveRequests() {
-      try {
-        let response = await axios.get(`${serverUrl}/supervisor/leave-requests`);
-        let data = response.data;
-
-        // Filter out leave requests that have already passed their end date
-        const currentDate = new Date();
-        const filteredLeaveRequests = data.filter(request => {
-          const requestEndDate = new Date(request.endDate);
-          // Compare only the date part, not the time
-          return (
-            requestEndDate.getFullYear() > currentDate.getFullYear() ||
-            (requestEndDate.getFullYear() === currentDate.getFullYear() &&
-              requestEndDate.getMonth() > currentDate.getMonth()) ||
-            (requestEndDate.getFullYear() === currentDate.getFullYear() &&
-              requestEndDate.getMonth() === currentDate.getMonth() &&
-              requestEndDate.getDate() >= currentDate.getDate())
-          );
-        });
-        setLeaveRequests(filteredLeaveRequests);
-      } catch (error) {
-        console.error("Error fetching leave requests:", error);
-      }
+useEffect(() => {
+  async function fetchLeaveRequests() {
+    if (!supervisorId) {
+      console.warn("Supervisor ID is missing for leave request fetch.");
+      return;
     }
 
-    fetchLeaveRequests();
-  }, []);
+    try {
+      let response = await axios.get(`${serverUrl}/supervisor/leave-requests/${supervisorId}`);
+      let data = response.data;
+
+      const currentDate = new Date();
+      const filteredLeaveRequests = data.filter(request => {
+        const requestEndDate = new Date(request.endDate);
+        return (
+          requestEndDate.getFullYear() > currentDate.getFullYear() ||
+          (requestEndDate.getFullYear() === currentDate.getFullYear() &&
+            requestEndDate.getMonth() > currentDate.getMonth()) ||
+          (requestEndDate.getFullYear() === currentDate.getFullYear() &&
+            requestEndDate.getMonth() === currentDate.getMonth() &&
+            requestEndDate.getDate() >= currentDate.getDate())
+        );
+      });
+
+      setLeaveRequests(filteredLeaveRequests);
+    } catch (error) {
+      console.error("Error fetching filtered leave requests:", error);
+    }
+  }
+
+  fetchLeaveRequests();
+}, [supervisorId]);
 
 
   return (

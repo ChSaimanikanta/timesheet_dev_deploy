@@ -33,7 +33,7 @@ function ApproveTimesheet() {
     try {
       const timesheets = await axios.get(`${serverUrl}/admins/all/new`);
       const datasOfTimesheet = timesheets.data;
-console.log(timesheets)
+      console.log(timesheets)
       let timehseetData = [];
 
       for (let empId in datasOfTimesheet) {
@@ -167,11 +167,11 @@ console.log(timesheets)
         // Make a PUT request to update the status of the sheet in the API
         const response = await axios.put(
           `${serverUrl}/admins/working-hours/${sheet.adminId}/reject-range?startDate=${sheet.startDate}&endDate=${sheet.endDate}&reason=${rejectReason}`
-        
+
         );
-        
+
         if (response.data) {
-          
+
           setSuccessModalForReject(true);
         }
       });
@@ -223,7 +223,7 @@ console.log(timesheets)
         {timesheetDatas.length > 0 ? (
           <Container>
             <div className="py-3 ">
-              <p className=" text-center spr-approval-title " style={{color:"white"}}>Timesheet List</p>
+              <p className=" text-center spr-approval-title " style={{ color: "white" }}>Timesheet List</p>
             </div>
             {/* without select timesheet error  */}
             {errorMessage && (
@@ -257,38 +257,38 @@ console.log(timesheets)
                   {/* table body */}
                   {timesheetDatas
                     ? timesheetDatas.map((sheet) => (
-                        <tr key={sheet.adminId} className="text-center">
-                          <td>
-                            <input
-                              type="checkbox"
-                              name="approvalchkTimesheet"
-                              checked={sheet.checked}
-                              onChange={() =>
-                                handleCheckboxChange(sheet.adminId)
-                              }
-                            ></input>
-                          </td>
-                          <td>{sheet.adminId}</td>
-                          <td>{sheet.startDate}</td>
-                          <td>{sheet.endDate}</td>
-                          <td>{sheet.totalHours}</td>
-                          <td>
-                            <button
-                              className="btn btn-primary"
-                              onClick={() => {
-                                goEditPage(
-                                  sheet.adminId,
-                                  sheet.checked,
-                                  sheet.startDate,
-                                  sheet.endDate
-                                );
-                              }}
-                            >
-                              Edit
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      <tr key={sheet.adminId} className="text-center">
+                        <td>
+                          <input
+                            type="checkbox"
+                            name="approvalchkTimesheet"
+                            checked={sheet.checked}
+                            onChange={() =>
+                              handleCheckboxChange(sheet.adminId)
+                            }
+                          ></input>
+                        </td>
+                        <td>{sheet.adminId}</td>
+                        <td>{sheet.startDate}</td>
+                        <td>{sheet.endDate}</td>
+                        <td>{sheet.totalHours}</td>
+                        <td>
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => {
+                              goEditPage(
+                                sheet.adminId,
+                                sheet.checked,
+                                sheet.startDate,
+                                sheet.endDate
+                              );
+                            }}
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))
                     : ""}
                 </tbody>
               </table>
@@ -313,13 +313,15 @@ console.log(timesheets)
           <div className="no-timesheet">
             <h3>No Submitted Timesheet </h3>
             <button
-              className="btn btn-secondary "
+              className="btn btn-secondary"
+              style={{ fontSize: "1.5rem", padding: "0.75rem 1.5rem" }}
               onClick={() => {
                 navigate("/superadmin");
               }}
             >
               Cancel
             </button>
+
           </div>
         )}
 

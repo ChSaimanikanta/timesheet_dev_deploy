@@ -32,71 +32,71 @@ function EmployeeHome() {
   const [leaveRequests, setLeaveRequests] = useState([]);
 
   // Fetch timesheet submission data dynamically
- useEffect(() => {
-  async function fetchTimesheetData() {
-    if (!employeeId) {
-      console.warn("Employee ID is missing.");
-      return;
-    }
-
-    let today = new Date();
-    let startDate, endDate;
-
-    // ✅ Determine correct timesheet period
-    if (today.getDate() <= 15) {
-      startDate = new Date(today.getFullYear(), today.getMonth(), 1); // First half (1st to 15th)
-      endDate = new Date(today.getFullYear(), today.getMonth(), 15);
-    } else {
-      startDate = new Date(today.getFullYear(), today.getMonth(), 16); // Second half (16th to last day)
-      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    }
-
-    // ✅ Ensure endDate covers the entire day
-    endDate.setHours(23, 59, 59, 999);
-
-    // ✅ Format dates correctly to prevent timezone shifts
-    let formattedStartDate = startDate.toLocaleDateString('en-CA'); // Correct format YYYY-MM-DD
-    let formattedEndDate = endDate.toLocaleDateString('en-CA');
-
-    console.log("Fetching timesheet:", formattedStartDate, "to", formattedEndDate);
-
-    try {
-      let response = await axios.get(
-      `${serverUrl}/workinghours/employee/${employeeId}/range?startDate=${formattedStartDate}&endDate=${formattedEndDate}`
-      );
-
-      let data = response.data;
-
-      console.log("API Response:", data);
-
-      if (data.length > 0) {
-        // ✅ Sort data to ensure correct start and end dates
-        let sortedData = data.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-        let firstDate = sortedData[0].date;  // ✅ First entry in sorted data
-        let lastDate = sortedData[sortedData.length - 1].date;  // ✅ Last entry in sorted data
-
-        setStartSubmitDate(firstDate);
-        setEndSubmitDate(lastDate);
-        setSubmitEmployeeId(sortedData[0].employeeId);
-        setStatusValue(sortedData[0].status);
-
-        // ✅ Update submission status dynamically
-        if (sortedData[0].status === "APPROVED" || sortedData[0].status === "REJECTED") {
-          dispatch(submitOFF(false));
-        } else {
-          dispatch(submitON(true));
-        }
-      } else {
-        setStatusValue("No Data Submitted");
+  useEffect(() => {
+    async function fetchTimesheetData() {
+      if (!employeeId) {
+        console.warn("Employee ID is missing.");
+        return;
       }
-    } catch (error) {
-      console.error("Error fetching timesheet data:", error);
-    }
-  }
 
-  fetchTimesheetData();
-}, [employeeId, dispatch, serverUrl, submitON, submitOFF]);
+      let today = new Date();
+      let startDate, endDate;
+
+      // ✅ Determine correct timesheet period
+      if (today.getDate() <= 15) {
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1); // First half (1st to 15th)
+        endDate = new Date(today.getFullYear(), today.getMonth(), 15);
+      } else {
+        startDate = new Date(today.getFullYear(), today.getMonth(), 16); // Second half (16th to last day)
+        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      }
+
+      // ✅ Ensure endDate covers the entire day
+      endDate.setHours(23, 59, 59, 999);
+
+      // ✅ Format dates correctly to prevent timezone shifts
+      let formattedStartDate = startDate.toLocaleDateString('en-CA'); // Correct format YYYY-MM-DD
+      let formattedEndDate = endDate.toLocaleDateString('en-CA');
+
+      console.log("Fetching timesheet:", formattedStartDate, "to", formattedEndDate);
+
+      try {
+        let response = await axios.get(
+          `${serverUrl}/workinghours/employee/${employeeId}/range?startDate=${formattedStartDate}&endDate=${formattedEndDate}`
+        );
+
+        let data = response.data;
+
+        console.log("API Response:", data);
+
+        if (data.length > 0) {
+          // ✅ Sort data to ensure correct start and end dates
+          let sortedData = data.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+          let firstDate = sortedData[0].date;  // ✅ First entry in sorted data
+          let lastDate = sortedData[sortedData.length - 1].date;  // ✅ Last entry in sorted data
+
+          setStartSubmitDate(firstDate);
+          setEndSubmitDate(lastDate);
+          setSubmitEmployeeId(sortedData[0].employeeId);
+          setStatusValue(sortedData[0].status);
+
+          // ✅ Update submission status dynamically
+          if (sortedData[0].status === "APPROVED" || sortedData[0].status === "REJECTED") {
+            dispatch(submitOFF(false));
+          } else {
+            dispatch(submitON(true));
+          }
+        } else {
+          setStatusValue("No Data Submitted");
+        }
+      } catch (error) {
+        console.error("Error fetching timesheet data:", error);
+      }
+    }
+
+    fetchTimesheetData();
+  }, [employeeId, dispatch, serverUrl, submitON, submitOFF]);
 
   async function leaveStatus() {
     let response = await axios.get(
@@ -126,44 +126,12 @@ function EmployeeHome() {
     leaveStatus();
   }, [leaveObjectId]);
 
-  // async function timesheetState() {
-  //   if (startSubmitDate && endSubmitDate && submitEmployeeId) {
-  //     try {
-  //       let response = await axios.get(
-  //         `${serverUrl}/workinghours/employee/${submitEmployeeId}/range?startDate=${startSubmitDate}&endDate=${endSubmitDate}`
-  //       );
-  //       console.log(response)
-  //       let data = response.data;
-  //       let status = data[0].status;
-  //       // console.log(statusValue);
-
-  //       if (status === "APPROVED") {
-  //         setStatusValue(status);
-  //         dispatch(submitOFF(false));
-  //         localStorage.setItem(`isSubmitOn${employeeId}`, "false");
-  //         localStorage.setItem(`statusValue${employeeId}`, status);
-  //       } else if (status === "REJECTED") {
-  //         setStatusValue(status);
-  //         dispatch(submitOFF(false));
-  //         localStorage.setItem(`isSubmitOn${employeeId}`, "false");
-  //         localStorage.setItem(`statusValue${employeeId}`, status);
-  //       }
-  //     } catch (error) {
-  //       console.error("Error fetching timesheet data:", error);
-  //     }
-  //   }
-  // }
-
-  // useEffect(() => {
-  //   timesheetState();
-  // }, [startSubmitDate, endSubmitDate, employeeId]);
-
   useEffect(() => {
     async function fetchLeaveRequests() {
       try {
         let response = await axios.get(`${serverUrl}/leaverequests/employee/${employeeId}`);
         let data = response.data;
-  
+
         // Filter out leave requests that have already passed their end date
         const currentDate = new Date();
         const filteredLeaveRequests = data.filter(request => {
@@ -183,19 +151,18 @@ function EmployeeHome() {
         console.error("Error fetching leave requests:", error);
       }
     }
-  
+
     fetchLeaveRequests();
   }, []);
-  
+
   return (
     <>
       <div className="ti-background-clr">
         <div className="ti-home-container">
           <div className="left-navigation">
             <div
-              className={`collapse-container mb-3 ${
-                isOpenTimesheet ? "active" : ""
-              }`}
+              className={`collapse-container mb-3 ${isOpenTimesheet ? "active" : ""
+                }`}
             >
               <button
                 onClick={() => setIsOpenTimesheet(!isOpenTimesheet)}
@@ -220,9 +187,8 @@ function EmployeeHome() {
               )}
             </div>
             <div
-              className={`collapse-container mb-3 ${
-                isOpenLeaveManagement ? "active" : ""
-              }`}
+              className={`collapse-container mb-3 ${isOpenLeaveManagement ? "active" : ""
+                }`}
             >
               <button
                 onClick={() => setIsOpenLeaveManagement(!isOpenLeaveManagement)}
@@ -247,7 +213,7 @@ function EmployeeHome() {
                   </ul>
                   <ul>
                     <Link to={"/employee/approvedleaverequests"}>
-                    View Approved Leave Requests
+                      View Approved Leave Requests
                     </Link>
                   </ul>
                 </div>
@@ -256,17 +222,6 @@ function EmployeeHome() {
           </div>
 
           <div className="right-details">
-            {/* notification about timesheet */}
-            {/* <div className="row text-center ti-home-notification">
-
-                            <div className="col   mx-5 my-2 p-2 ">Timesheet to be approved : {countTimesheet}</div>
-                            <div className="col  mx-5  my-2 p-2  ">Rejected Timesheets : {rejectTimesheetCount}</div>
-
-                        </div>
-                        <div className="row text-center ti-home-notification">
-                            <div className="col   mx-5 my-2 p-2 ">Leaves to be approved : {leavePending}</div>
-                            <div className="col  mx-5  my-2 p-2  ">Rejected Leave Request : {rejectLeave}</div>
-                        </div> */}
 
             <div className="row text-center ti-home-content mt-2">
               {/* timesheet status */}
@@ -295,8 +250,8 @@ function EmployeeHome() {
                                 statusValue === "APPROVED"
                                   ? "green"
                                   : statusValue === "REJECTED"
-                                  ? "red"
-                                  : "blue",
+                                    ? "red"
+                                    : "blue",
                               color: "white", // Set the text color to white for better visibility
                             }}
                           >
@@ -325,9 +280,9 @@ function EmployeeHome() {
                           <p className="mb-0">{leave.endDate}</p>
                         </div>
                         <div className="d-flex align-items-center mb-2">
-            <p className="mb-0 me-2">Number of Days:</p>
-            <p className="mb-0">{leave.noOfDays}</p>
-          </div>
+                          <p className="mb-0 me-2">Number of Days:</p>
+                          <p className="mb-0">{leave.noOfDays}</p>
+                        </div>
                         <div className="d-flex align-items-center">
                           <p className="mb-0 me-2">STATUS:</p>
                           <button
