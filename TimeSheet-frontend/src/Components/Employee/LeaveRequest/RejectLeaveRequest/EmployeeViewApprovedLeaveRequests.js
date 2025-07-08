@@ -83,7 +83,7 @@ function ViewApprovedLeaveRequests() {
         </Container>
       ) : (
         <div className="no-timesheet">
-          <h3>No Rejected Timesheet Available</h3>
+          <h3>No Approved Leave Requests Available</h3>
           <button
             className="btn btn-secondary"
             onClick={() => {

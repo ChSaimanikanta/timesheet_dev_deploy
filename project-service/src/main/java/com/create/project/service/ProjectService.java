@@ -212,7 +212,7 @@ public class ProjectService {
                     supervisorResponses.add(supervisorResponse);
 
                     try {
-                        employeeClient.deleteEmployeeProj(supId);
+//                        employeeClient.deleteEmployeeProj(supId);
                         logger.info("Deleted employee {} after successful promotion.", supId);
                     } catch (FeignException e) {
                         logger.error("Failed to delete employee {} after promotion: {}", supId, e.getMessage());

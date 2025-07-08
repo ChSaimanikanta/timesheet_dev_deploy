@@ -41,7 +41,7 @@ public class Supervisor {
     @NotBlank(message = "Email ID must not be blank")
     @Email(regexp = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", 
        message = "Email address must be valid")
-private String emailId;
+    private String emailId;
 
 
     @NotNull(message = "Aadhar number must not be null")
