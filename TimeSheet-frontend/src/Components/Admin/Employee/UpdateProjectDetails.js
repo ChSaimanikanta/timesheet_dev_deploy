@@ -262,9 +262,9 @@ const UpdateProjectDetails = () => {
         <div className="row">
           <div className="col d-flex project-search-form-container"> {/* Renamed container */}
             <form onSubmit={handleSearch} className="w-100">
-              <p className="sprAdmin-createAdmin-title mb-4" style={{color:"white"}}>Search Project</p>
+              <p className="sprAdmin-createAdmin-title mb-4" style={{ color: "white" }}>Search Project</p>
               <div className="mb-2 d-flex align-items-center">
-                <label className="project-id-label me-2" style={{color:"white"}}>Select Project ID:</label>
+                <label className="project-id-label me-2" style={{ color: "white" }}>Select Project ID:</label>
                 <select
                   className="project-id-input form-control me-2"
                   value={projectId || ""}
@@ -365,14 +365,15 @@ const UpdateProjectDetails = () => {
                                     !updatedProject.employeeTeamMembers.some(
                                       (selectedEmployee, selectedIndex) =>
                                         selectedEmployee === employeeOption.employeeId && selectedIndex !== index
-                                    ) && // Exclude already selected employees
-                                    !updatedProject.supervisorTeamMembers.includes(employeeOption.employeeId) // Exclude IDs selected as supervisors
+                                    ) &&
+                                    !updatedProject.supervisorTeamMembers.includes(employeeOption.employeeId)
                                 )
                                 .map((employeeOption) => (
                                   <option key={employeeOption.employeeId} value={employeeOption.employeeId}>
-                                    {employeeOption.employeeId} - {employeeOption.firstName} {employeeOption.lastName}
+                                    {employeeOption.employeeId} - {employeeOption.firstName} {employeeOption.lastName} (Employee)
                                   </option>
                                 ))}
+
                             </select>
                             <div className="d-flex align-items-center gap-2 mt-2">
                               <button
@@ -404,58 +405,76 @@ const UpdateProjectDetails = () => {
                       <br />
                       <div>
                         <strong>Supervisor Employees</strong>
-                        {updatedProject.supervisorTeamMembers.map((supervisor, index) => (
-                          <div key={index} className="mb-3">
-                            <select
-                              className="form-control"
-                              value={supervisor || ""}
-                              onChange={(e) => handleSupervisorIdChange(index, e.target.value)}
-                            >
-                              <option value="" disabled>
-                                Select a Supervisor ID
-                              </option>
-                              {combinedTeamMembers
-                                .filter(
-                                  (member) =>
-                                    !updatedProject.supervisorTeamMembers.some(
-                                      (selectedSupervisor, selectedIndex) =>
-                                        selectedSupervisor === (member.supervisorId || member.employeeId) &&
-                                        selectedIndex !== index
-                                    ) && // Exclude IDs already selected as supervisors
-                                    !updatedProject.employeeTeamMembers.includes(member.employeeId) // Exclude IDs selected as employees
-                                )
-                                .map((member) => (
-                                  <option
-                                    key={member.supervisorId || member.employeeId} // Ensure unique key
-                                    value={member.supervisorId || member.employeeId} // Use either supervisorId or employeeId
-                                  >
-                                    {member.supervisorId
-                                      ? `${member.supervisorId} - ${member.firstName} ${member.lastName}`
-                                      : `${member.employeeId} - ${member.firstName} ${member.lastName}`}
-                                  </option>
-                                ))}
-                            </select>
-                            <div className="d-flex align-items-center gap-2 mt-2">
-                              <button
-                                type="button"
-                                className="btn btn-danger"
-                                onClick={() => handleRemoveSupervisor(index)}
-                                disabled={updatedProject.supervisorTeamMembers.length <= 1}
-                              >
-                                Remove
-                              </button>
-                              {index === updatedProject.supervisorTeamMembers.length - 1 && (
-                                <button
-                                  type="button"
-                                  className="btn btn-success"
-                                  onClick={handleAddSupervisor}
-                                >
-                                  Add Supervisor
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+{updatedProject.supervisorTeamMembers.map((supervisor, index) => (
+  <div key={index} className="mb-3">
+    <select
+      className="form-control"
+      value={supervisor || ""}
+      onChange={(e) => handleSupervisorIdChange(index, e.target.value)}
+    >
+      <option value="" disabled>
+        Select a Supervisor ID
+      </option>
+
+      {(() => {
+        const originalSupervisors = combinedTeamMembers
+          .filter((member) => !!member.supervisorId)
+          .map((member) => member.supervisorId);
+
+        return combinedTeamMembers
+          // Remove duplicate members based on ID
+          .filter((member, index, self) => {
+            const id = member.supervisorId || member.employeeId;
+            return index === self.findIndex(
+              (m) => (m.supervisorId || m.employeeId) === id
+            );
+          })
+
+          // Prepare label for each member
+          .map((member) => {
+            const id = member.supervisorId || member.employeeId;
+            const isOriginallySupervisor = originalSupervisors.includes(id);
+
+            const roleLabel = isOriginallySupervisor ? 'Supervisor' : 'Employee';
+
+            return {
+              id,
+              label: `${id} - ${member.firstName} ${member.lastName} (${roleLabel})`
+            };
+          })
+
+          // Render options
+          .map((option, index) => (
+            <option key={`${option.id}-${index}`} value={option.id}>
+              {option.label}
+            </option>
+          ));
+      })()}
+    </select>
+
+    <div className="d-flex align-items-center gap-2 mt-2">
+      <button
+        type="button"
+        className="btn btn-danger"
+        onClick={() => handleRemoveSupervisor(index)}
+        disabled={updatedProject.supervisorTeamMembers.length <= 1}
+      >
+        Remove
+      </button>
+
+      {index === updatedProject.supervisorTeamMembers.length - 1 && (
+        <button
+          type="button"
+          className="btn btn-success"
+          onClick={handleAddSupervisor}
+        >
+          Add Supervisor
+        </button>
+      )}
+    </div>
+  </div>
+))}
+
                       </div>
 
 

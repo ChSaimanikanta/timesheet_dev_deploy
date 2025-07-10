@@ -21,6 +21,8 @@ export function EmployeeLeaveRequest() {
   const [approvedLeaveCount, setApprovedLeaveCount] = useState(0);
   const [totalLeaves, setTotalLeaves] = useState(18);
   const [pendingLeaves, setPendingLeaves] = useState(0);
+const [showErrorModal, setShowErrorModal] = useState(false);
+const [errorMessage, setErrorMessage] = useState("");
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -73,34 +75,42 @@ export function EmployeeLeaveRequest() {
       comments: "",
     },
     validationSchema: schemaLeave,
-    onSubmit: async (values) => {
-      try {
-        const requestedDays = values.noOfDays;
+   onSubmit: async (values) => {
+  try {
+    const requestedDays = values.noOfDays;
 
-        // Validate requested days do not exceed available leaves
-        if (requestedDays > pendingLeaves) {
-          alert(
-            `Error: You cannot request ${requestedDays} days. Only ${pendingLeaves} days are available.`
-          );
-          return;
-        }
+    if (requestedDays > pendingLeaves) {
+      setErrorMessage(`You requested ${requestedDays} days, but only ${pendingLeaves} are available.`);
+      setShowErrorModal(true);
+      return;
+    }
 
-        const leaveData = await axios.post(
-          `${serverUrl}/leaverequests`,
-          values
-        );
+    const response = await axios.post(`${serverUrl}/leaverequests`, values);
 
-        if (leaveData.data) {
-          setLeaveSuccessModal(true); // Show the modal
-          setTotalLeaves((prevTotalLeaves) => prevTotalLeaves - requestedDays);
-          localStorage.setItem(`leaveObjectId${employeeId}`, leaveData.data.id);
-          dispatch(leaveSubmitON(true));
-          formik.resetForm();
-        }
-      } catch (error) {
-        console.error("Error submitting leave request:", error);
-      }
-    },
+    if (response.data?.error) {
+      setErrorMessage(response.data.error);
+      setShowErrorModal(true);
+      return;
+    }
+
+    setLeaveSuccessModal(true);
+    setTotalLeaves((prev) => prev - requestedDays);
+    localStorage.setItem(`leaveObjectId${employeeId}`, response.data.id);
+    dispatch(leaveSubmitON(true));
+    formik.resetForm();
+
+  } catch (error) {
+    if (error.response && error.response.status === 422) {
+      const serverMessage = error.response.data?.error || "Request could not be processed.";
+      setErrorMessage(serverMessage);
+      setShowErrorModal(true);
+    } else {
+      console.error("Unexpected error:", error);
+      setErrorMessage("Something went wrong while submitting your leave. Please try again.");
+      setShowErrorModal(true);
+    }
+  }
+},
   });
 
   useEffect(() => {
@@ -277,33 +287,29 @@ export function EmployeeLeaveRequest() {
               </div>
             </div>
           </div>
-          <Modal
-            className="custom-modal"
-            style={{ left: "50%", transform: "translateX(-50%)" }}
-            dialogClassName="modal-dialog-centered"
-            show={leaveSuccessModal}
-          >
-            <div className="d-flex flex-column modal-success p-4 align-items-center">
-              <img
-                src={successCheck}
-                className="img-fluid mb-4"
-                alt="successCheck"
-              />
-              <p className="mb-4 text-center">
-                Your Leave Request Submitted Successfully
-              </p>
-              <button
-                className="btn w-100 text-white"
-                onClick={() => {
-                  setLeaveSuccessModal(false);
-                  navigate("/employee");
-                }}
-                style={{ backgroundColor: "#5EAC24" }}
-              >
-                Close
-              </button>
-            </div>
-          </Modal>
+         <Modal
+  className="custom-modal"
+  style={{ left: "50%", transform: "translateX(-50%)" }}
+  dialogClassName="modal-dialog-centered"
+  show={showErrorModal}
+  onHide={() => setShowErrorModal(false)}
+>
+  <div className="d-flex flex-column modal-error p-4 align-items-center">
+    <p className="mb-4 text-center text-danger fw-bold">
+      {errorMessage}
+    </p>
+    <button
+      className="btn w-100"
+      onClick={() => setShowErrorModal(false)}
+      style={{ backgroundColor: "#dc3545", color: "white" }}
+    >
+      Close
+    </button>
+  </div>
+</Modal>
+
+
+
         </div>
       </div>
     </>

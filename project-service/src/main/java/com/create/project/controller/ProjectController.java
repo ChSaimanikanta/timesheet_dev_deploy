@@ -1,12 +1,10 @@
 package com.create.project.controller;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.create.project.entity.EmployeeResponse;
 import com.create.project.entity.Project;
@@ -40,20 +39,25 @@ public class ProjectController {
 
     
     @GetMapping("/{projectId}")
-    public ResponseEntity<ProjectResponse> getProjectById(@PathVariable String projectId) {
-        Project project = projectService.getProjectById(projectId);
-        ProjectResponse response = projectService.createProjectResponse(project);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<?> getProjectById(@PathVariable String projectId) {
+        try {
+            ProjectResponse response = projectService.getProjectById(projectId);
+            return ResponseEntity.ok(response);
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Unexpected error: " + ex.getMessage());
+        }
     }
 
     @GetMapping
     public ResponseEntity<List<ProjectResponse>> getAllProjects() {
-        List<Project> projects = projectService.getAllProjects();
-        List<ProjectResponse> projectResponses = projects.stream()
-            .map(projectService::createProjectResponse)
-            .collect(Collectors.toList());
-        return ResponseEntity.ok(projectResponses);
+        List<ProjectResponse> responses = projectService.getAllProjects();
+        return ResponseEntity.ok(responses);
     }
+
+
 
     @PutMapping("/{projectId}")
     public ResponseEntity<ProjectResponse> updateProject(@PathVariable String projectId, @RequestBody Project updatedProject) {

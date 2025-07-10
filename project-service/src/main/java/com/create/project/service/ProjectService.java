@@ -65,11 +65,6 @@ public class ProjectService {
     @Autowired
     private ModelMapper modelMapper;
     
-   
-    
-//    private long lastSupervisorId = 0;
-
-    
     public ProjectResponse createProject(Project project) {
         Set<String> uniqueErrors = new LinkedHashSet<>();
 
@@ -89,13 +84,14 @@ public class ProjectService {
             throw new InvalidRequestException(String.join(" and ", uniqueErrors));
         }
 
-        // Check for duplicate project title
+        // Ensure project title is unique
         if (projectRepository.existsByProjectTitle(project.getProjectTitle())) {
             uniqueErrors.add("Project title already exists: " + project.getProjectTitle());
             throw new InvalidRequestException(String.join(" and ", uniqueErrors));
         }
-        
+
         try {
+            // Generate ID if missing
             if (project.getProjectId() == null || project.getProjectId().isEmpty()) {
                 project.setProjectId(generateUniqueProjectId());
             }
@@ -107,13 +103,24 @@ public class ProjectService {
                 throw new InvalidRequestException(String.join(" and ", uniqueErrors));
             }
 
+            // 🔄 Remove overlapping supervisor IDs that already exist in employee list
+            List<String> filteredSupervisors = project.getSupervisorTeamMembers().stream()
+                .filter(supId -> !project.getEmployeeTeamMembers().contains(supId))
+                .collect(Collectors.toList());
+            project.setSupervisorTeamMembers(filteredSupervisors);
+
+            // Handle members
             List<EmployeeResponse> employeeResponses = handleEmployeeTeamMembers(project);
             List<SupervisorResponse> supervisorResponses = handleSupervisorTeamMembers(project);
 
-            project.setSupervisorTeamMembers(supervisorResponses.stream()
-                .map(SupervisorResponse::getSupervisorId)
-                .collect(Collectors.toList()));
+            // Update project with resolved supervisor IDs
+            project.setSupervisorTeamMembers(
+                supervisorResponses.stream()
+                    .map(SupervisorResponse::getSupervisorId)
+                    .collect(Collectors.toList())
+            );
 
+            // Save to repository
             projectRepository.save(project);
 
             return buildProjectResponse(project, employeeResponses, supervisorResponses);
@@ -130,6 +137,7 @@ public class ProjectService {
 
         return null;
     }
+
 
     private String generateUniqueProjectId() {
         Optional<Project> latestProject = projectRepository.findTopByOrderByProjectIdDesc();
@@ -191,19 +199,35 @@ public class ProjectService {
             .collect(Collectors.toList());
     }
 
-     private List<SupervisorResponse> handleSupervisorTeamMembers(Project project) {
+    private List<SupervisorResponse> handleSupervisorTeamMembers(Project project) {
         List<SupervisorResponse> supervisorResponses = new ArrayList<>();
 
         for (String supId : project.getSupervisorTeamMembers()) {
-            try {
-                logger.info("Processing supervisorTeamMember ID: {}", supId);
+            logger.info("Processing supervisorTeamMember ID: {}", supId);
 
-                // Try treating as an employee to be promoted
+            try {
+                // Step 1: Check if supervisor already exists
+                Supervisor existingSupervisor = supervisorClient.getSupervisorById(supId);
+                if (existingSupervisor != null) {
+                    SupervisorResponse response = modelMapper.map(existingSupervisor, SupervisorResponse.class);
+                    response.setProjects(Collections.singletonList(project.getProjectId()));
+                    supervisorResponses.add(response);
+                    logger.info("Using existing supervisor record for ID: {}", supId);
+                    continue;
+                }
+            } catch (FeignException.NotFound supervisorNotFound) {
+                // Proceed to promote if supervisor doesn't exist
+                logger.info("ID {} not found as supervisor, checking as employee", supId);
+            }
+
+            try {
+                // Step 2: Try treating as employee
                 Employee employee = employeeClient.getEmployeeById(supId);
 
                 if (employee != null) {
+                    // Promote to supervisor
                     Supervisor supervisor = createSupervisorFromEmployee(supId, project.getProjectId());
-                    supervisor.setSupervisorId(supId); // Preserve the original ID
+                    supervisor.setSupervisorId(supId);
 
                     Supervisor createdSupervisor = supervisorClient.createSupervisor(supervisor);
 
@@ -211,35 +235,23 @@ public class ProjectService {
                     supervisorResponse.setProjects(Collections.singletonList(project.getProjectId()));
                     supervisorResponses.add(supervisorResponse);
 
+                    logger.info("Promoted employee {} to supervisor.", supId);
+
+                    // Optional: delete employee record (commented for safety)
+                    /*
                     try {
-//                        employeeClient.deleteEmployeeProj(supId);
-                        logger.info("Deleted employee {} after successful promotion.", supId);
+                        employeeClient.deleteEmployeeProj(supId);
+                        logger.info("Deleted employee {} after promotion.", supId);
                     } catch (FeignException e) {
                         logger.error("Failed to delete employee {} after promotion: {}", supId, e.getMessage());
                     }
-
-                    continue;
+                    */
                 }
 
             } catch (FeignException.NotFound notEmployee) {
-                // not an employee, try as supervisor
-                try {
-                    Supervisor supervisor = supervisorClient.getSupervisorById(supId);
-                    SupervisorResponse supervisorResponse = modelMapper.map(supervisor, SupervisorResponse.class);
-                    supervisorResponse.setProjects(Collections.singletonList(project.getProjectId()));
-
-                    List<EmployeeResponse> employees = getEmployeesForSupervisor(supId);
-                    supervisorResponse.setEmployee(employees);
-
-                    supervisorResponses.add(supervisorResponse);
-
-                } catch (FeignException.NotFound notSupervisorEither) {
-                    logger.warn("ID {} is neither employee nor supervisor", supId);
-                    throw new ResourceNotFoundException("No employee or supervisor found with ID: " + supId);
-                } catch (FeignException e) {
-                    logger.error("Error retrieving supervisor with ID: {}", supId, e);
-                }
-
+                // Step 3: Neither employee nor supervisor — report error
+                logger.warn("ID {} is neither employee nor supervisor", supId);
+                throw new ResourceNotFoundException("No employee or supervisor found with ID: " + supId);
             } catch (FeignException e) {
                 logger.error("Unexpected error during supervisor processing for ID {}: {}", supId, e.getMessage());
             }
@@ -337,61 +349,99 @@ public class ProjectService {
 
    
 
- public Project getProjectById(String projectId) {
-    return projectRepository.findById(projectId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found: " + projectId));
-}
+     public ProjectResponse getProjectById(String projectId) {
+    	    Project project = projectRepository.findById(projectId)
+    	        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found: " + projectId));
 
-    public List<Project> getAllProjects() {
-        List<Project> projects = projectRepository.findAll();
-        projects.forEach(project -> {
-            List<String> validEmployeeIds = project.getEmployeeTeamMembers().stream()
-                .filter(empId -> {
-                    try {
-                        employeeClient.getEmployeeById(empId);
-                        return true;
-                    } catch (FeignException.NotFound e) {
-                        logger.warn("Employee not found with ID: {}", empId, e);
-                        return false;
-                    }
-                })
-                .collect(Collectors.toList());
-            project.setEmployeeTeamMembers(validEmployeeIds);
+    	    List<EmployeeResponse> employeeResponses = project.getEmployeeTeamMembers().stream()
+    	        .map(empId -> {
+    	            try {
+    	                Employee employee = employeeClient.getEmployeeById(empId);
+    	                EmployeeResponse response = modelMapper.map(employee, EmployeeResponse.class);
+    	                response.setProjects(Collections.singletonList(project.getProjectId()));
+    	                return response;
+    	            } catch (FeignException.NotFound e) {
+    	                logger.warn("Employee not found: {}", empId);
+    	                return null;
+    	            }
+    	        })
+    	        .filter(Objects::nonNull)
+    	        .collect(Collectors.toList());
 
-            List<String> validSupervisorIds = project.getSupervisorTeamMembers().stream()
-                .filter(supId -> {
-                    try {
-                        supervisorClient.getSupervisorById(supId);
-                        return true;
-                    } catch (FeignException.NotFound e) {
-                        logger.warn("Supervisor not found with ID: {}", supId, e);
-                        return false;
-                    }
-                })
-                .collect(Collectors.toList());
-            project.setSupervisorTeamMembers(validSupervisorIds);
-        });
-        return projects;
-    }
+    	    List<SupervisorResponse> supervisorResponses = project.getSupervisorTeamMembers().stream()
+    	        .map(supId -> {
+    	            try {
+    	                Supervisor supervisor = supervisorClient.getSupervisorById(supId);
+    	                SupervisorResponse response = modelMapper.map(supervisor, SupervisorResponse.class);
+    	                response.setProjects(Collections.singletonList(project.getProjectId()));
+    	                return response;
+    	            } catch (FeignException.NotFound e) {
+    	                logger.warn("Supervisor not found: {}", supId);
+    	                return null;
+    	            }
+    	        })
+    	        .filter(Objects::nonNull)
+    	        .collect(Collectors.toList());
+
+    	    return buildProjectResponse(project, employeeResponses, supervisorResponses);
+    	}
+
+ public List<ProjectResponse> getAllProjects() {
+	    List<Project> projects = projectRepository.findAll();
+	    List<ProjectResponse> responses = new ArrayList<>();
+
+	    for (Project project : projects) {
+	        List<EmployeeResponse> validEmployees = project.getEmployeeTeamMembers().stream()
+	            .map(empId -> {
+	                try {
+	                    Employee employee = employeeClient.getEmployeeById(empId);
+	                    EmployeeResponse response = modelMapper.map(employee, EmployeeResponse.class);
+	                    response.setProjects(Collections.singletonList(project.getProjectId()));
+	                    return response;
+	                } catch (FeignException.NotFound e) {
+	                    logger.warn("Employee not found: {}", empId);
+	                    return null;
+	                }
+	            })
+	            .filter(Objects::nonNull)
+	            .collect(Collectors.toList());
+
+	        List<SupervisorResponse> validSupervisors = project.getSupervisorTeamMembers().stream()
+	            .map(supId -> {
+	                try {
+	                    Supervisor supervisor = supervisorClient.getSupervisorById(supId);
+	                    SupervisorResponse response = modelMapper.map(supervisor, SupervisorResponse.class);
+	                    response.setProjects(Collections.singletonList(project.getProjectId()));
+	                    return response;
+	                } catch (FeignException.NotFound e) {
+	                    logger.warn("Supervisor not found: {}", supId);
+	                    return null;
+	                }
+	            })
+	            .filter(Objects::nonNull)
+	            .collect(Collectors.toList());
+
+	        // Build response with enriched team members
+	        ProjectResponse projectResponse = buildProjectResponse(project, validEmployees, validSupervisors);
+	        responses.add(projectResponse);
+	    }
+
+	    return responses;
+	}
+
 
     public ProjectResponse updateProject(String projectId, Project updatedProject) {
         Set<String> uniqueErrors = new LinkedHashSet<>();
 
-        // Check if the project exists
-        Project existingProject = null;
-        try {
-            existingProject = projectRepository.findById(projectId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found with ID: " + projectId));
-        } catch (ResourceNotFoundException e) {
-            uniqueErrors.add(e.getMessage());
-            throw new InvalidRequestException(String.join(" and ", uniqueErrors));
-        }
+        // Step 1: Retrieve existing project
+        Project existingProject = projectRepository.findById(projectId)
+            .orElseThrow(() -> new ResourceNotFoundException("Project not found with ID: " + projectId));
 
-        // Update project details
+        // Step 2: Update title and description
         existingProject.setProjectTitle(updatedProject.getProjectTitle());
         existingProject.setProjectDescription(updatedProject.getProjectDescription());
 
-        // Validate employee and supervisor IDs
+        // Step 3: Validate employee and supervisor IDs
         try {
             validateEmployeeIds(updatedProject.getEmployeeTeamMembers());
         } catch (EmployeeNotFoundException e) {
@@ -408,55 +458,134 @@ public class ProjectService {
             throw new InvalidRequestException(String.join(" and ", uniqueErrors));
         }
 
-        // Handle and validate employee team members
-        List<EmployeeResponse> employeeResponses = new ArrayList<>();
-        try {
-            employeeResponses = handleEmployeeTeamMembers(updatedProject);
-        } catch (FeignException.NotFound e) {
-            uniqueErrors.add("Employee not found with ID: " + extractIdFromException(e));
+        // Step 4: Handle role transitions (remove old supervisors not present in updated list)
+        List<String> incomingSupervisors = updatedProject.getSupervisorTeamMembers();
+        List<String> existingSupervisors = existingProject.getSupervisorTeamMembers();
+
+        Set<String> supervisorsToRemove = new HashSet<>(existingSupervisors);
+        supervisorsToRemove.removeAll(incomingSupervisors);
+
+        for (String supervisorIdToRemove : supervisorsToRemove) {
+            try {
+                Supervisor supervisor = supervisorClient.getSupervisorById(supervisorIdToRemove);
+                List<String> updatedProjects = Optional.ofNullable(supervisor.getProjects())
+                    .orElse(new ArrayList<>())
+                    .stream()
+                    .filter(pid -> !pid.equals(existingProject.getProjectId()))
+                    .collect(Collectors.toList());
+
+                supervisor.setProjects(updatedProjects);
+                supervisorRepository.save(supervisor); // or use supervisorClient.updateSupervisor()
+                logger.info("Removed project {} from former supervisor {}", projectId, supervisorIdToRemove);
+            } catch (FeignException e) {
+                logger.warn("Failed to update supervisor {}: {}", supervisorIdToRemove, e.getMessage());
+            }
         }
 
-        // Handle and validate supervisor team members
-        List<SupervisorResponse> supervisorResponses = new ArrayList<>();
-        try {
-            supervisorResponses = handleSupervisorTeamMembers(updatedProject);
-        } catch (FeignException.NotFound e) {
-            uniqueErrors.add("Supervisor not found with ID: " + extractIdFromException(e));
-        }
+        // Step 5: Handle updated employee and supervisor responses
+        List<EmployeeResponse> employeeResponses = handleEmployeeTeamMembersWithProjectId(updatedProject, projectId);
+        List<SupervisorResponse> supervisorResponses = handleSupervisorTeamMembersWithProjectId(updatedProject, projectId);
 
         if (!uniqueErrors.isEmpty()) {
             throw new InvalidRequestException(String.join(" and ", uniqueErrors));
         }
 
-        // Update project members
+        // Step 6: Apply updated team members to project entity
         existingProject.setEmployeeTeamMembers(updatedProject.getEmployeeTeamMembers());
         existingProject.setSupervisorTeamMembers(updatedProject.getSupervisorTeamMembers());
 
-        // Save updated project
+        // Step 7: Save and respond
         projectRepository.save(existingProject);
-
-        // Build and return the project response
         return buildProjectResponse(existingProject, employeeResponses, supervisorResponses);
     }
 
+
+    public List<EmployeeResponse> handleEmployeeTeamMembersWithProjectId(Project project, String projectId) {
+        return project.getEmployeeTeamMembers().stream()
+            .map(empId -> {
+                Employee employee = employeeClient.getEmployeeById(empId);
+                EmployeeResponse employeeResponse = modelMapper.map(employee, EmployeeResponse.class);
+                employeeResponse.setProjects(Collections.singletonList(projectId));
+                return employeeResponse;
+            })
+            .collect(Collectors.toList());
+    }
+
+    public List<SupervisorResponse> handleSupervisorTeamMembersWithProjectId(Project project, String projectId) {
+        List<SupervisorResponse> supervisorResponses = new ArrayList<>();
+
+        for (String supId : project.getSupervisorTeamMembers()) {
+            try {
+                // Try fetching as Supervisor first
+                Supervisor supervisor = supervisorClient.getSupervisorById(supId);
+                SupervisorResponse response = modelMapper.map(supervisor, SupervisorResponse.class);
+                response.setProjects(Collections.singletonList(projectId));
+                supervisorResponses.add(response);
+                logger.info("Using existing supervisor record for ID: {}", supId);
+
+            } catch (FeignException.NotFound e) {
+                logger.info("ID {} not found as supervisor, checking as employee", supId);
+
+                try {
+                    // Try fetching as Employee and promote
+                    Employee employee = employeeClient.getEmployeeById(supId);
+                    if (employee != null) {
+                        Supervisor newSupervisor = createSupervisorFromEmployee(supId, projectId);
+                        newSupervisor.setSupervisorId(supId);
+
+                        Supervisor createdSupervisor = supervisorClient.createSupervisor(newSupervisor);
+                        SupervisorResponse supervisorResponse = modelMapper.map(createdSupervisor, SupervisorResponse.class);
+                        supervisorResponse.setProjects(Collections.singletonList(projectId));
+                        supervisorResponses.add(supervisorResponse);
+
+                        logger.info("Promoted employee {} to supervisor for project {}", supId, projectId);
+                    }
+                } catch (FeignException.NotFound ex) {
+                    logger.warn("ID {} is neither supervisor nor employee", supId);
+                    throw new ResourceNotFoundException("No employee or supervisor found with ID: " + supId);
+                }
+            }
+        }
+
+        return supervisorResponses;
+    }
 
 
     public void deleteProject(String projectId) {
         Set<String> uniqueErrors = new LinkedHashSet<>();
 
-        // Retrieve the project entity
+        // Step 1: Retrieve the project
         Project project = projectRepository.findById(projectId)
             .orElseThrow(() -> new ResourceNotFoundException("Project not found: " + projectId));
 
-        // Convert Project to ArchiveProject using ModelMapper
+        // Step 2: Archive the project
         ArchiveProject archiveProject = modelMapper.map(project, ArchiveProject.class);
-
-        // Save the archived project record
         archiveProjectRepository.save(archiveProject);
 
-        // Delete the project record from the main table
+        // Step 3: Dissociate supervisors from this project
+        for (String supervisorId : project.getSupervisorTeamMembers()) {
+            try {
+                Supervisor supervisor = supervisorClient.getSupervisorById(supervisorId);
+                if (supervisor != null && supervisor.getProjects() != null) {
+                    List<String> updatedProjects = supervisor.getProjects().stream()
+                        .filter(pid -> !pid.equals(projectId))
+                        .collect(Collectors.toList());
+
+                    supervisor.setProjects(updatedProjects);
+
+                    // Save updated supervisor (via repository or client)
+                    supervisorRepository.save(supervisor);
+                    logger.info("Removed project {} from supervisor {}", projectId, supervisorId);
+                }
+            } catch (FeignException e) {
+                logger.warn("Failed to dissociate supervisor {} from project {}: {}", supervisorId, projectId, e.getMessage());
+            }
+        }
+
+        // Step 4: Delete project from main table
         try {
             projectRepository.delete(project);
+            logger.info("Successfully deleted project {}", projectId);
         } catch (Exception e) {
             uniqueErrors.add("An unexpected error occurred while deleting the project.");
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join(" and ", uniqueErrors));

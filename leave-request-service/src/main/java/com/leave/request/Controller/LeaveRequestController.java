@@ -34,8 +34,9 @@ public class LeaveRequestController {
     private LeaveRequestService leaveRequestService;
 
     @PostMapping
-    public LeaveRequest createLeaveRequest(@RequestBody LeaveRequest leaveRequest) {
-        return leaveRequestService.createLeaveRequest(leaveRequest);
+    public ResponseEntity<LeaveRequest> createLeaveRequest(@RequestBody LeaveRequest leaveRequest) {
+        LeaveRequest created = leaveRequestService.createLeaveRequest(leaveRequest);
+        return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")

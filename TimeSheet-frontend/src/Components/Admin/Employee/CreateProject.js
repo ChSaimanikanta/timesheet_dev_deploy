@@ -382,42 +382,67 @@ useEffect(() => {
                   <p>Team Members:</p>
                   <ul>
                     {formData.employeeTeamMembers.map((member, index) => {
-                      // Find the details for the current member
-                      const memberDetails = combinedTeamMembers.find(
-                        (combinedMember) =>
-                          combinedMember.employeeId === member || combinedMember.supervisorId === member
-                      );
+  const memberDetails = combinedTeamMembers.find(
+    (combinedMember) =>
+      combinedMember.employeeId === member || combinedMember.supervisorId === member
+  );
 
-                      return (
-                        <li key={index}>
-                          ID: {member} -{" "}
-                          {memberDetails
-                            ? `${memberDetails.firstName} ${memberDetails.lastName}`
-                            : "Details not found"}
-                        </li>
-                      );
-                    })}
+  const isSupervisor = formData.supervisorTeamMembers.includes(memberDetails?.employeeId);
+  const role = isSupervisor ? "Supervisor, Employee" : "Employee";
+
+  return (
+    <li key={index}>
+      ID: {member} -{" "}
+      {memberDetails
+        ? `${memberDetails.firstName} ${memberDetails.lastName} (${role})`
+        : "Details not found"}
+    </li>
+  );
+})}
+
                   </ul>
 
                 </div>
                 <div className="confirmation-field">
                   <p>Supervisor Employees:</p>
-                  <ul>
-                    {formData.supervisorTeamMembers.map((supervisor, index) => {
-                      const supervisorDetails = combinedTeamMembers.find(
-                        (member) =>
-                          member.supervisorId === supervisor || member.employeeId === supervisor
-                      );
+                <ul>
+  {formData.supervisorTeamMembers.concat(
+    formData.employeeTeamMembers.filter(
+      (empId) => !formData.supervisorTeamMembers.includes(empId)
+    )
+  ).map((personId, index) => {
+    const personDetails = combinedTeamMembers.find(
+      (member) =>
+        member.supervisorId === personId || member.employeeId === personId
+    );
 
-                      return (
-                        <li key={index}>
-                          {supervisorDetails
-                            ? `${supervisorDetails.supervisorId || supervisorDetails.employeeId} - ${supervisorDetails.firstName} ${supervisorDetails.lastName}`
-                            : `ID: ${supervisor}`}
-                        </li>
-                      );
-                    })}
-                  </ul>
+    if (!personDetails) {
+      return <li key={index}>ID: {personId} - Details not found</li>;
+    }
+
+    const isSupervisor = formData.supervisorTeamMembers.includes(personId);
+    const isEmployee = formData.employeeTeamMembers.includes(personId);
+
+    let roleText = "";
+    if (isSupervisor && isEmployee) {
+      roleText = "(Supervisor, Employee)";
+    } else if (isSupervisor) {
+      roleText = "(Supervisor)";
+    } else if (isEmployee) {
+      roleText = "(Employee)";
+    }
+
+    const id = personDetails.supervisorId || personDetails.employeeId;
+
+    return (
+      <li key={index}>
+        {id} - {personDetails.firstName} {personDetails.lastName} {roleText}
+      </li>
+    );
+  })}
+</ul>
+
+
                 </div>
 
                 <div className="confirmation-button-group">
@@ -484,20 +509,26 @@ useEffect(() => {
                         <option value="" disabled>
                           Select an Employee ID
                         </option>
-                        {availableEmployeeIds
-                          .filter(
-                            (employee) =>
-                              !formData.employeeTeamMembers.some(
-                                (selectedMember, selectedIndex) =>
-                                  selectedMember === employee.employeeId && selectedIndex !== index
-                              ) && // Exclude already selected in Team Members
-                              !formData.supervisorTeamMembers.includes(employee.employeeId) // Exclude IDs selected in Supervisors
-                          )
-                          .map((employee) => (
-                            <option key={employee.employeeId} value={employee.employeeId}>
-                              {employee.employeeId} - {employee.firstName} {employee.lastName}
-                            </option>
-                          ))}
+                       {availableEmployeeIds
+  .filter(
+    (employee) =>
+      !formData.employeeTeamMembers.some(
+        (selectedMember, selectedIndex) =>
+          selectedMember === employee.employeeId && selectedIndex !== index
+      ) &&
+      !formData.supervisorTeamMembers.includes(employee.employeeId)
+  )
+  .map((employee) => {
+    const isSupervisor = formData.supervisorTeamMembers.includes(employee.employeeId);
+    const roleText = isSupervisor ? "(Supervisor, Employee)" : "(Employee)";
+
+    return (
+      <option key={employee.employeeId} value={employee.employeeId}>
+        {employee.employeeId} - {employee.firstName} {employee.lastName} {roleText}
+      </option>
+    );
+  })}
+
                       </select>
                       {employeeTeamMembersError[index] && (
                         <p className="error-message-ProjectForm text-danger">
@@ -548,28 +579,45 @@ useEffect(() => {
                         <option value="" disabled>
                           Select a Supervisor ID
                         </option>
-                        {combinedTeamMembers
-                          .filter(
-                            (member) =>
-                              // Exclude IDs already selected in the Supervisor Dropdown
-                              !formData.supervisorTeamMembers.some(
-                                (selectedSupervisor, selectedIndex) =>
-                                  selectedSupervisor === (member.supervisorId || member.employeeId) &&
-                                  selectedIndex !== index
-                              ) &&
-                              // Exclude IDs already selected in the Employee Dropdown
-                              !formData.employeeTeamMembers.includes(member.employeeId)
-                          )
-                          .map((member) => (
-                            <option
-                              key={member.supervisorId || member.employeeId}
-                              value={member.supervisorId || member.employeeId}
-                            >
-                              {member.supervisorId
-                                ? `${member.supervisorId} - ${member.firstName} ${member.lastName}`
-                                : `${member.employeeId} - ${member.firstName} ${member.lastName}`}
-                            </option>
-                          ))}
+                    {combinedTeamMembers
+  .filter((member, index, self) => {
+    const id = member.supervisorId || member.employeeId;
+    // Avoid duplicates by checking unique IDs
+    return index === self.findIndex(
+      (m) => (m.supervisorId || m.employeeId) === id
+    );
+  })
+  .map((member) => {
+    const isSupervisor = !!member.supervisorId;
+    const isEmployee = !!member.employeeId;
+
+    // Prioritize showing as Supervisor if promoted
+    if (isSupervisor) {
+      return {
+        id: member.supervisorId,
+        label: `${member.supervisorId} - ${member.firstName} ${member.lastName} (Supervisor)`
+      };
+    }
+
+    // Otherwise show as Employee
+    if (isEmployee && !member.supervisorId) {
+      return {
+        id: member.employeeId,
+        label: `${member.employeeId} - ${member.firstName} ${member.lastName} (Employee)`
+      };
+    }
+
+    // No valid role, skip
+    return null;
+  })
+  .filter(Boolean) // Remove nulls
+  .map((option, index) => (
+    <option key={`${option.id}-${index}`} value={option.id}>
+      {option.label}
+    </option>
+  ))}
+
+
                       </select>
                       {supervisorTeamMembersError[index] && (
                         <p className="error-message-ProjectForm text-danger">

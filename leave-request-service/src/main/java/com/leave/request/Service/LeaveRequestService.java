@@ -6,12 +6,16 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.leave.request.client.ProjectServiceClient;
 import com.leave.request.entity.LeaveRequest;
 import com.leave.request.entity.ProjectResponse;
 import com.leave.request.repo.LeaveRequestRepository;
+
+import feign.FeignException;
 
 @Service
 public class LeaveRequestService {
@@ -24,19 +28,28 @@ public class LeaveRequestService {
 
     public LeaveRequest createLeaveRequest(LeaveRequest leaveRequest) {
         if (leaveRequest.getStartDate().isBefore(LocalDate.now())) {
-            throw new IllegalArgumentException("Start date must be today or in the future.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Start date must be today or in the future.");
         }
 
-        // Get the list of projects for the employee
-        List<ProjectResponse> projects = projectServiceClient.getProjectsByEmployeeId(leaveRequest.getEmployeeId());
+        List<ProjectResponse> projects;
+        try {
+            projects = projectServiceClient.getProjectsByEmployeeId(leaveRequest.getEmployeeId());
 
-        // Find the project ID from the projects list (assuming only one project is associated with the employee)
-        String projectId = projects.stream()
-                                   .findFirst()
-                                   .map(ProjectResponse::getProjectId)
-                                   .orElseThrow(() -> new IllegalArgumentException("No project found for the employee."));
+            if (projects.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, 
+                    "Employee is not assigned to any projects. Please contact the admin.");
+            }
 
-        // Get the list of supervisors for the project
+        } catch (FeignException.InternalServerError e) {
+            // Improve error clarity by inspecting root cause if possible
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "Your EmployeeId is not mapped to any project. Cannot proceed with leave request.");
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "Project service responded with an unexpected error.");
+        }
+
+        String projectId = projects.get(0).getProjectId();
         List<String> supervisors = projectServiceClient.getSupervisorsForProject(projectId);
 
         leaveRequest.setProjectId(projectId);
@@ -45,6 +58,7 @@ public class LeaveRequestService {
 
         return leaveRequestRepository.save(leaveRequest);
     }
+
 
     public LeaveRequest updateLeaveRequest(Long id, LeaveRequest leaveRequest) {
         Optional<LeaveRequest> existingRequest = leaveRequestRepository.findById(id);
